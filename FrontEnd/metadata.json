@@ -1,0 +1,6 @@
+{
+  "name": "Industrial QC",
+  "description": "Inspection Standard Digitalization for industrial Quality Control teams.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
