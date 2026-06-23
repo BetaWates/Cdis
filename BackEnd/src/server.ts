@@ -5,9 +5,12 @@ import dotenv from 'dotenv';
 import masterFormsRouter from './routes/masterForms';
 import dailyChecksRouter from './routes/dailyChecks';
 import approvalsRouter from './routes/approvals';
-import { testConnection } from './db/connection';
+import { testConnection, initializeDatabase } from './db/connection';
 
 dotenv.config();
+
+// Auto-initialize MySQL schema on launch
+initializeDatabase();
 
 const app = express();
 const PORT = process.env.PORT || 4000;

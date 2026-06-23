@@ -5,6 +5,7 @@ import MasterFormsView from './components/MasterFormsView';
 import DailyChecksView from './components/DailyChecksView';
 import ApprovalInboxView from './components/ApprovalInboxView';
 import SettingsView from './components/SettingsView';
+import AiinaLogo from './components/AiinaLogo';
 import { Menu, X } from 'lucide-react';
 import { useMasterForms } from './hooks/useMasterForms';
 import { useSubmissions } from './hooks/useSubmissions';
@@ -39,6 +40,7 @@ export default function App() {
     addSubmission,
     advanceApproval,
     rejectSubmission,
+    requestRejectSubmission,
     approveException,
     resetToDefaults: resetSubmissions,
     pendingCounts,
@@ -56,7 +58,7 @@ export default function App() {
     setInspectorNameState('J. Smith');
   };
 
-  const openSubmissionsCount = submissions.filter((s) => s.status === 'PENDING').length;
+  const openSubmissionsCount = submissions.filter((s) => s.status === 'PENDING' || s.status === 'REQUEST_REJECT').length;
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -70,15 +72,9 @@ export default function App() {
     <div className="min-h-screen bg-[#f8f9fa] text-[#191c1d] flex flex-col md:flex-row antialiased">
 
       {/* Mobile Top Header */}
-      <header className="md:hidden flex items-center justify-between px-5 py-4 bg-white border-b border-[#c5c5d3] sticky top-0 z-40">
+      <header className="md:hidden flex items-center justify-between px-5 py-3.5 bg-white border-b border-[#c5c5d3] sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#dce1ff] flex items-center justify-center">
-            <span className="font-bold text-[#00236f] text-sm">IQ</span>
-          </div>
-          <div>
-            <h1 className="font-extrabold text-[#00236f] text-sm leading-tight">AIINA QC</h1>
-            <p className="text-[10px] text-[#444651]">Inspection Standard</p>
-          </div>
+          <AiinaLogo size="sm" />
         </div>
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -100,24 +96,17 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-              <div className="w-9 h-9 rounded-full bg-[#dce1ff] flex items-center justify-center">
-                <span className="font-bold text-[#00236f] text-base">IQ</span>
-              </div>
-              <div>
-                <h4 className="font-black text-sm text-[#00236f]">AIINA QC</h4>
-                <p className="text-[10px] text-[#757682]">Inspection Standard</p>
-              </div>
+              <AiinaLogo size="sm" />
             </div>
             <div className="flex-1 flex flex-col gap-1.5">
               {navItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { setCurrentTab(item.id); setIsMobileMenuOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${
-                    currentTab === item.id
+                  className={`w-full text-left px-4 py-2.5 rounded-lg text-xs font-bold transition-all ${currentTab === item.id
                       ? 'bg-[#dce1ff]/40 text-[#00236f] border-l-4 border-[#00236f]'
                       : 'text-[#444651] hover:bg-gray-100'
-                  }`}
+                    }`}
                 >
                   {item.label}
                   {item.count !== undefined && item.count > 0 && (
@@ -180,6 +169,7 @@ export default function App() {
             onAdvanceApproval={advanceApproval}
             onRejectSubmission={rejectSubmission}
             onApproveException={approveException}
+            onRequestReject={requestRejectSubmission}
           />
         )}
 

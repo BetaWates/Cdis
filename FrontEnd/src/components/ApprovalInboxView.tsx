@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { DailyCheckSubmission, MeasurementEntry, ActivityLogEntry } from '../types';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import { 
   Search, 
   Filter, 
@@ -20,7 +23,8 @@ import {
   Inbox,
   UserCheck,
   Bell,
-  BellRing
+  BellRing,
+  FileText
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -40,6 +44,7 @@ interface ApprovalInboxViewProps {
   onAdvanceApproval: (id: string, reviewerName: string, reviewNotes: string) => void;
   onRejectSubmission: (id: string, reviewerName: string, reviewNotes: string) => void;
   onApproveException: (id: string, reviewerName: string, reviewNotes: string) => void;
+  onRequestReject: (id: string, requesterName: string, remark: string) => void;
 }
 
 export default function ApprovalInboxView({ 
@@ -49,7 +54,8 @@ export default function ApprovalInboxView({
   pendingCounts,
   onAdvanceApproval,
   onRejectSubmission,
-  onApproveException
+  onApproveException,
+  onRequestReject
 }: ApprovalInboxViewProps) {
   const [viewState, setViewState] = useState<'list' | 'detail'>('list');
   const [selectedSubmission, setSelectedSubmission] = useState<DailyCheckSubmission | null>(null);
@@ -65,6 +71,290 @@ export default function ApprovalInboxView({
   // Reminder toast and sent-tracking (Task 3E)
   const [reminderToast, setReminderToast] = useState<string | null>(null);
   const [remindersSent, setRemindersSent] = useState<Set<string>>(new Set());
+
+  // Request Reject state
+  const [showRequestRejectModal, setShowRequestRejectModal] = useState(false);
+  const [requestRejectRemark, setRequestRejectRemark] = useState('');
+  const [isReviewing, setIsReviewing] = useState(false);
+
+  const handleExportToExcel = () => {
+    if (!selectedSubmission) return;
+
+    // Sheet 1: Inspection Result
+    const ws1Data = [
+      ["Model Name", "Part Number", "Sample ID", "Submitter Name", "Department", "Submitted Date", "Overall Status"],
+      [
+        selectedSubmission.modelName || '',
+        selectedSubmission.partNumber || '',
+        selectedSubmission.sampleId || '',
+        selectedSubmission.submitterName || '',
+        selectedSubmission.submitterDept || '',
+        selectedSubmission.submittedDate || '',
+        selectedSubmission.status || ''
+      ]
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(ws1Data);
+    ws1["!cols"] = [
+      { wch: 25 }, // Model Name
+      { wch: 20 }, // Part Number
+      { wch: 15 }, // Sample ID
+      { wch: 20 }, // Submitter Name
+      { wch: 15 }, // Department
+      { wch: 20 }, // Submitted Date
+      { wch: 25 }  // Overall Status
+    ];
+
+    // Sheet 2: Measurements
+    const ws2Data = [
+      [
+        "Parameter Name",
+        "Standard Value",
+        "Tolerance",
+        "Unit",
+        "Shift I Value",
+        "Shift I Status",
+        "Shift II Value",
+        "Shift II Status",
+        "Shift III Value",
+        "Shift III Status"
+      ]
+    ];
+    selectedSubmission.measurements.forEach(m => {
+      const valI = m.shiftIValue !== undefined ? m.shiftIValue : (m.measuredValue || '');
+      const statusI = m.shiftIStatus || m.status || '';
+      const valII = m.shiftIIValue !== undefined ? m.shiftIIValue : (m.measuredValue || '');
+      const statusII = m.shiftIIStatus || m.status || '';
+      const valIII = m.shiftIIIValue !== undefined ? m.shiftIIIValue : (m.measuredValue || '');
+      const statusIII = m.shiftIIIStatus || m.status || '';
+
+      ws2Data.push([
+        m.paramName || '',
+        m.standardValue || '',
+        m.tolerance || '',
+        m.unit || '',
+        valI,
+        statusI,
+        valII,
+        statusII,
+        valIII,
+        statusIII
+      ]);
+    });
+    const ws2 = XLSX.utils.aoa_to_sheet(ws2Data);
+    ws2["!cols"] = [
+      { wch: 30 }, // Parameter Name
+      { wch: 15 }, // Standard Value
+      { wch: 12 }, // Tolerance
+      { wch: 8 },  // Unit
+      { wch: 15 }, // Shift I Value
+      { wch: 15 }, // Shift I Status
+      { wch: 15 }, // Shift II Value
+      { wch: 15 }, // Shift II Status
+      { wch: 15 }, // Shift III Value
+      { wch: 15 }  // Shift III Status
+    ];
+
+    // Sheet 3: Approval Log
+    const ws3Data = [
+      ["Time", "Action", "User", "Details"]
+    ];
+    selectedSubmission.activityLog.forEach(log => {
+      ws3Data.push([
+        log.time || '',
+        log.action || '',
+        log.user || '',
+        log.details || ''
+      ]);
+    });
+    const ws3 = XLSX.utils.aoa_to_sheet(ws3Data);
+    ws3["!cols"] = [
+      { wch: 20 }, // Time
+      { wch: 20 }, // Action
+      { wch: 25 }, // User
+      { wch: 40 }  // Details
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, "Inspection Result");
+    XLSX.utils.book_append_sheet(wb, ws2, "Measurements");
+    XLSX.utils.book_append_sheet(wb, ws3, "Approval Log");
+
+    const safeFileName = `Inspection_Detail_${selectedSubmission.partNumber}_${selectedSubmission.id}.xlsx`;
+    XLSX.writeFile(wb, safeFileName);
+  };
+
+  const handleExportToPDF = () => {
+    if (!selectedSubmission) return;
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    // 1. Draw AIINA Logo & Company Name (as header)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(28);
+    doc.setTextColor(200, 16, 46); // Red (#C8102E)
+    doc.text("AIINA", 14, 20);
+
+    doc.setFontSize(12);
+    doc.setTextColor(27, 42, 107); // Navy (#1B2A6B)
+    doc.text("QC", 48, 20);
+
+    // Blue Line under logo
+    doc.setDrawColor(27, 42, 107);
+    doc.setLineWidth(0.8);
+    doc.line(14, 23, 196, 23);
+
+    // Company Name below line
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(27, 42, 107);
+    doc.text("PT. ALPHA INNOVATECH INDONESIA", 14, 27);
+
+    // Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(80, 80, 80);
+    doc.text("QUALITY CONTROL DIGITAL INSPECTION SUMMARY REPORT", 14, 38);
+
+    // Two column layout for part & submission info
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(50, 50, 50);
+
+    doc.text(`Model: ${selectedSubmission.modelName}`, 14, 45);
+    doc.text(`Part Name: ${selectedSubmission.modelName}`, 14, 50);
+    doc.text(`Part Number: ${selectedSubmission.partNumber}`, 14, 55);
+
+    doc.text(`Customer: PT. Alpha Innovatech Indonesia`, 110, 45);
+    doc.text(`Inspection Date: ${selectedSubmission.submittedDate}`, 110, 50);
+    doc.text(`Inspector: ${selectedSubmission.submitterName}`, 110, 55);
+
+    // Divider line
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.4);
+    doc.line(14, 60, 196, 60);
+
+    // Section 1 heading
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(27, 42, 107);
+    doc.text("1. Calibration Values Verification (Shifts I, II, III)", 14, 67);
+
+    // Gather table body data for Section 1
+    const fullTableBody = selectedSubmission.measurements.map((m, index) => {
+      const valI = m.shiftIValue || m.measuredValue;
+      const valII = m.shiftIIValue || m.measuredValue;
+      const valIII = m.shiftIIIValue || m.measuredValue;
+      const statusI = m.shiftIStatus || m.status;
+      const statusII = m.shiftIIStatus || m.status;
+      const statusIII = m.shiftIIIStatus || m.status;
+
+      return [
+        String(index + 1).padStart(2, '0'),
+        m.paramName,
+        `${m.standardValue} ${m.unit}`,
+        m.tolerance,
+        `Shift I: ${valI} (${statusI})\nShift II: ${valII} (${statusII})\nShift III: ${valIII} (${statusIII})`,
+        m.status
+      ];
+    });
+
+    (doc as any).autoTable({
+      startY: 71,
+      head: [['No', 'Parameter Name', 'Standard Value', 'Tolerance', 'Measured Shift Values', 'Overall Verification']],
+      body: fullTableBody,
+      theme: 'striped',
+      headStyles: { fillColor: [27, 42, 107], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 8, cellPadding: 3, font: 'helvetica' },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        1: { fontStyle: 'bold' },
+        2: { cellWidth: 25 },
+        3: { cellWidth: 20 },
+        4: { fontStyle: 'normal' },
+        5: { cellWidth: 25, halign: 'center' }
+      },
+      didParseCell: (data: any) => {
+        if (data.column.index === 5 && data.cell.raw === 'NG') {
+          data.cell.styles.textColor = [186, 26, 26];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    // Section 2 heading
+    const finalY1 = (doc as any).lastAutoTable.finalY || 180;
+    
+    // Check page overflow to push Section 2 to a new page if space is low
+    const spaceNeeded = 45; // title + table header + a couple of rows
+    const pageHeight = doc.internal.pageSize.height;
+    let nextSectionY = finalY1 + 12;
+    if (nextSectionY + spaceNeeded > pageHeight) {
+      doc.addPage();
+      nextSectionY = 20; // reset to top of the new page
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(27, 42, 107);
+    doc.text("2. Shift Inspection Summary Tally", 14, nextSectionY);
+
+    // Gather table body data for Section 2
+    const summaryTableBody = selectedSubmission.measurements.map((m, index) => {
+      const statusI = m.shiftIStatus || m.status;
+      const statusII = m.shiftIIStatus || m.status;
+      const statusIII = m.shiftIIIStatus || m.status;
+      
+      let totalOk = 0;
+      let totalNg = 0;
+      
+      if (statusI === 'OK') totalOk++;
+      if (statusI === 'NG') totalNg++;
+      
+      if (statusII === 'OK') totalOk++;
+      if (statusII === 'NG') totalNg++;
+      
+      if (statusIII === 'OK') totalOk++;
+      if (statusIII === 'NG') totalNg++;
+
+      return [
+        String(index + 1).padStart(2, '0'),
+        m.paramName,
+        String(totalOk),
+        String(totalNg)
+      ];
+    });
+
+    (doc as any).autoTable({
+      startY: nextSectionY + 4,
+      head: [['No', 'Inspection Item', 'Total OK', 'Total NG']],
+      body: summaryTableBody,
+      theme: 'striped',
+      headStyles: { fillColor: [27, 42, 107], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 8, cellPadding: 3, font: 'helvetica' },
+      columnStyles: {
+        0: { cellWidth: 15, halign: 'center' },
+        1: { fontStyle: 'bold' },
+        2: { cellWidth: 40, halign: 'center' },
+        3: { cellWidth: 40, halign: 'center' }
+      },
+      didParseCell: (data: any) => {
+        if (data.row.section === 'body') {
+          const totalNg = parseInt(data.row.cells[3].text || '0', 10);
+          if (totalNg > 0) {
+            data.cell.styles.fillColor = [255, 240, 240];
+            data.cell.styles.textColor = [186, 26, 26];
+          }
+        }
+      }
+    });
+
+    const safePdfName = `QC_Summary_Report_${selectedSubmission.partNumber}_${selectedSubmission.id}.pdf`;
+    doc.save(safePdfName);
+  };
 
   // Detect submissions pending > 24 hours (compare submittedAt to Date.now())
   const isOverdue = (submittedAt?: string): boolean => {
@@ -119,29 +409,66 @@ export default function ApprovalInboxView({
     setReviewNotes('');
   };
 
-  const handleAdvance = () => {
-    if (!selectedSubmission) return;
-    onAdvanceApproval(selectedSubmission.id, inspectorName, reviewNotes);
-    alert('Inspection checksheet approved and advanced to next stage.');
-    handleActionCompleted();
+  const handleAdvance = async () => {
+    if (!selectedSubmission || isReviewing) return;
+    try {
+      setIsReviewing(true);
+      await onAdvanceApproval(selectedSubmission.id, inspectorName, reviewNotes);
+      alert('Inspection checksheet approved and advanced to next stage.');
+      handleActionCompleted();
+    } catch (err) {
+      console.error('[ApprovalInboxView] Advance failed:', err);
+      alert('Failed to advance approval. Please try again.');
+    } finally {
+      setIsReviewing(false);
+    }
   };
 
-  const handleApproveWaiver = () => {
-    if (!selectedSubmission) return;
-    onApproveException(selectedSubmission.id, inspectorName, reviewNotes);
-    alert('Deviation approved as exception. Checksheet status is now set to APPROVED EXCEPTION.');
-    handleActionCompleted();
+  const handleApproveWaiver = async () => {
+    if (!selectedSubmission || isReviewing) return;
+    try {
+      setIsReviewing(true);
+      await onApproveException(selectedSubmission.id, inspectorName, reviewNotes);
+      alert('Deviation approved as exception. Checksheet status is now set to APPROVED EXCEPTION.');
+      handleActionCompleted();
+    } catch (err) {
+      console.error('[ApprovalInboxView] Waiver failed:', err);
+      alert('Failed to approve waiver. Please try again.');
+    } finally {
+      setIsReviewing(false);
+    }
   };
 
-  const handleReject = () => {
-    if (!selectedSubmission) return;
+  const handleReject = async () => {
+    if (!selectedSubmission || isReviewing) return;
     if (!reviewNotes.trim()) {
       alert('Review Notes with corrective action is strictly required before rejecting checksheet!');
       return;
     }
-    onRejectSubmission(selectedSubmission.id, inspectorName, reviewNotes);
-    alert('Inspection checksheet rejected and returned to technical line operator for rework.');
-    handleActionCompleted();
+    try {
+      setIsReviewing(true);
+      await onRejectSubmission(selectedSubmission.id, inspectorName, reviewNotes);
+      alert('Inspection checksheet rejected and returned to technical line operator for rework.');
+      handleActionCompleted();
+    } catch (err) {
+      console.error('[ApprovalInboxView] Reject failed:', err);
+      alert('Failed to reject submission. Please try again.');
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const handleRequestReject = () => {
+    if (!requestRejectRemark.trim()) {
+      alert('Remark / reason is required before submitting a reject request.');
+      return;
+    }
+    if (!selectedSubmission) return;
+    onRequestReject(selectedSubmission.id, inspectorName, requestRejectRemark);
+    setShowRequestRejectModal(false);
+    setRequestRejectRemark('');
+    setSelectedSubmission(null);
+    alert('Reject request submitted. Approver will review and action.');
   };
 
   // Helper to check what stage is current
@@ -289,6 +616,7 @@ export default function ApprovalInboxView({
                 const isHigh = s.priority === 'HIGH';
                 const isApproved = s.status === 'APPROVED_EXCEPTION';
                 const isRejected = s.status === 'REJECTED';
+                const isRequestReject = s.status === 'REQUEST_REJECT';
                 
                 const okCount = s.measurements.filter(m => m.status === 'OK').length;
                 const ngCount = s.measurements.filter(m => m.status === 'NG').length;
@@ -324,7 +652,12 @@ export default function ApprovalInboxView({
                           {isHigh && <Badge variant="high">HIGH PRIORITY</Badge>}
                           {isApproved && <Badge variant="active">APPROVED EXCEPTION</Badge>}
                           {isRejected && <Badge variant="destructive">REJECTED</Badge>}
-                          {!isApproved && !isRejected && <Badge variant="secondary">PENDING</Badge>}
+                          {isRequestReject && (
+                            <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-200">
+                              REQUEST REJECT
+                            </Badge>
+                          )}
+                          {!isApproved && !isRejected && !isRequestReject && <Badge variant="secondary">PENDING</Badge>}
                           {/* Reminder Sent badge — shown if overdue */}
                           {!isApproved && !isRejected && isOverdue(s.submittedAt) && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border bg-[#dce1ff] text-[#00164e] border-[#b6c4ff]">
@@ -471,6 +804,14 @@ export default function ApprovalInboxView({
                   <p className="text-xs text-[#757682] mt-0.5 font-semibold">
                     Submitted by {selectedSubmission.submitterName} • {selectedSubmission.submitterDept} • {selectedSubmission.submittedDate}
                   </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      onClick={handleExportToExcel}
+                      className="text-xs font-bold text-[#00236f] hover:underline flex items-center gap-1.5 bg-[#dce1ff]/30 hover:bg-[#dce1ff]/60 px-3.5 py-1.5 rounded-lg border border-[#b6c4ff] transition-all cursor-pointer select-none active:scale-95"
+                    >
+                      <Download size={14} /> Export Excel
+                    </button>
+                  </div>
                 </div>
                 <div className="shrink-0">
                   <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${
@@ -490,6 +831,13 @@ export default function ApprovalInboxView({
               {/* Left Main (9 cols) */}
               <div className="xl:col-span-9 space-y-6">
                 
+                {selectedSubmission?.rejectRequestRemark && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-sm text-orange-800 flex flex-col gap-1 shadow-sm">
+                    <span className="font-extrabold text-orange-850 uppercase tracking-wider text-xs">Reject Request Reason:</span>
+                    <p className="text-orange-950 mt-0.5">{selectedSubmission.rejectRequestRemark}</p>
+                  </div>
+                )}
+
                 {/* Summary Metrics block */}
                 <section className="bg-white border border-[#c5c5d3] rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between shadow-sm gap-4">
                   <div className="flex items-center gap-8 w-full sm:w-auto">
@@ -555,13 +903,20 @@ export default function ApprovalInboxView({
                           <TableHead>Parameter Name</TableHead>
                           <TableHead>Standard Value</TableHead>
                           <TableHead>Tolerance</TableHead>
-                          <TableHead>Measured Value</TableHead>
+                          <TableHead>Measured Shift Values</TableHead>
                           <TableHead className="text-right">Verification</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {selectedSubmission.measurements.map((m, index) => {
                           const isNG = m.status === 'NG';
+                          const valI = m.shiftIValue || m.measuredValue;
+                          const valII = m.shiftIIValue || m.measuredValue;
+                          const valIII = m.shiftIIIValue || m.measuredValue;
+                          const statusI = m.shiftIStatus || m.status;
+                          const statusII = m.shiftIIStatus || m.status;
+                          const statusIII = m.shiftIIIStatus || m.status;
+
                           return (
                             <TableRow 
                               key={m.paramName} 
@@ -574,23 +929,58 @@ export default function ApprovalInboxView({
                               <TableCell className="font-semibold">{m.paramName}</TableCell>
                               <TableCell className="text-[#757682] font-mono">{m.standardValue} {m.unit}</TableCell>
                               <TableCell className="text-[#757682] font-mono">{m.tolerance}</TableCell>
-                              <TableCell className="font-mono font-bold">
-                                {m.handwritingData ? (
-                                  <div className="flex flex-col gap-1 items-start">
-                                    <span className={isNG ? 'text-[#ba1a1a]' : 'text-slate-800'}>
-                                      {m.measuredValue} {m.unit}
+                              <TableCell className="font-mono text-xs">
+                                <div className="flex flex-col gap-1 py-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-[#757682] font-bold uppercase w-12">Shift I:</span>
+                                    <span className={statusI === 'NG' ? 'text-[#ba1a1a] font-bold' : 'text-slate-800 font-medium'}>
+                                      {valI} {m.unit}
                                     </span>
-                                    <img 
-                                      src={m.handwritingData} 
-                                      alt="Handwritten value stroke" 
-                                      className="h-6 border border-gray-100 bg-white rounded object-contain max-w-[100px]" 
-                                    />
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                      statusI === 'OK' ? 'bg-green-50 text-green-700 border-green-200' 
+                                      : statusI === 'NG' ? 'bg-red-100 text-[#ba1a1a] border-red-200' 
+                                      : 'bg-gray-50 text-[#757682] border-gray-200'
+                                    }`}>
+                                      {statusI}
+                                    </span>
                                   </div>
-                                ) : (
-                                  <span className={isNG ? 'text-[#ba1a1a]' : 'text-slate-800'}>
-                                    {m.measuredValue} {m.unit}
-                                  </span>
-                                )}
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-[#757682] font-bold uppercase w-12">Shift II:</span>
+                                    <span className={statusII === 'NG' ? 'text-[#ba1a1a] font-bold' : 'text-slate-800 font-medium'}>
+                                      {valII} {m.unit}
+                                    </span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                      statusII === 'OK' ? 'bg-green-50 text-green-700 border-green-200' 
+                                      : statusII === 'NG' ? 'bg-red-100 text-[#ba1a1a] border-red-200' 
+                                      : 'bg-gray-50 text-[#757682] border-gray-200'
+                                    }`}>
+                                      {statusII}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[9px] text-[#757682] font-bold uppercase w-12">Shift III:</span>
+                                    <span className={statusIII === 'NG' ? 'text-[#ba1a1a] font-bold' : 'text-slate-800 font-medium'}>
+                                      {valIII} {m.unit}
+                                    </span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
+                                      statusIII === 'OK' ? 'bg-green-50 text-green-700 border-green-200' 
+                                      : statusIII === 'NG' ? 'bg-red-100 text-[#ba1a1a] border-red-200' 
+                                      : 'bg-gray-50 text-[#757682] border-gray-200'
+                                    }`}>
+                                      {statusIII}
+                                    </span>
+                                  </div>
+                                  {m.handwritingData && (
+                                    <div className="mt-1 flex flex-col gap-0.5 items-start">
+                                      <span className="text-[8px] text-[#757682] uppercase font-bold">Ref Handwriting:</span>
+                                      <img 
+                                        src={m.handwritingData} 
+                                        alt="Handwritten value stroke" 
+                                        className="h-6 border border-gray-100 bg-white rounded object-contain max-w-[100px]" 
+                                      />
+                                    </div>
+                                  )}
+                                </div>
                               </TableCell>
                               <TableCell className="text-right">
                                 <span className={`inline-flex items-center justify-center w-6 h-6 rounded ${
@@ -607,8 +997,85 @@ export default function ApprovalInboxView({
                   </div>
                 </section>
 
+                {/* Shifts Summary Section */}
+                <section className="bg-white border border-[#c5c5d3] rounded-xl overflow-hidden shadow-sm">
+                  <div className="p-4 border-b border-[#c5c5d3] bg-[#f8f9fa] flex justify-between items-center gap-4">
+                    <div>
+                      <h3 className="font-bold text-sm text-[#00236f] m-0">Shift Inspection Summary</h3>
+                      <p className="text-[10px] text-[#757682] mt-0.5 font-semibold">Consolidated tally of PASS/FAIL verification across Shifts I, II, and III.</p>
+                    </div>
+                    <div className="flex gap-2.5 shrink-0">
+                      <button
+                        onClick={handleExportToExcel}
+                        className="text-xs font-bold text-[#00236f] hover:underline flex items-center gap-1.5 bg-[#dce1ff]/30 hover:bg-[#dce1ff]/60 px-3.5 py-2 rounded-lg border border-[#b6c4ff] transition-all cursor-pointer select-none active:scale-95"
+                      >
+                        <Download size={14} /> Export to Excel
+                      </button>
+                      <button
+                        onClick={handleExportToPDF}
+                        className="text-xs font-bold text-[#00236f] hover:underline flex items-center gap-1.5 bg-[#dce1ff]/30 hover:bg-[#dce1ff]/60 px-3.5 py-2 rounded-lg border border-[#b6c4ff] transition-all cursor-pointer select-none active:scale-95"
+                      >
+                        <FileText size={14} className="text-[#00236f]" /> Export to PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12 text-center">No</TableHead>
+                          <TableHead>Inspection Item</TableHead>
+                          <TableHead className="text-center w-32">Total OK</TableHead>
+                          <TableHead className="text-center w-32">Total NG</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedSubmission.measurements.map((m, index) => {
+                          const statusI = m.shiftIStatus || m.status;
+                          const statusII = m.shiftIIStatus || m.status;
+                          const statusIII = m.shiftIIIStatus || m.status;
+                          
+                          let totalOk = 0;
+                          let totalNg = 0;
+                          
+                          if (statusI === 'OK') totalOk++;
+                          if (statusI === 'NG') totalNg++;
+                          
+                          if (statusII === 'OK') totalOk++;
+                          if (statusII === 'NG') totalNg++;
+                          
+                          if (statusIII === 'OK') totalOk++;
+                          if (statusIII === 'NG') totalNg++;
+
+                          const hasNG = totalNg > 0;
+
+                          return (
+                            <TableRow 
+                              key={`summary-${m.paramName}`} 
+                              className={hasNG ? 'bg-red-50 hover:bg-red-100/70 text-[#ba1a1a]' : 'hover:bg-gray-50/50'}
+                            >
+                              <TableCell className="text-center font-semibold text-[#757682] relative">
+                                {hasNG && <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#ba1a1a]"></div>}
+                                {String(index + 1).padStart(2, '0')}
+                              </TableCell>
+                              <TableCell className="font-bold">{m.paramName}</TableCell>
+                              <TableCell className="text-center font-mono font-bold text-green-700">
+                                {totalOk}
+                              </TableCell>
+                              <TableCell className={`text-center font-mono font-bold ${hasNG ? 'text-[#ba1a1a]' : 'text-slate-500'}`}>
+                                {totalNg}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </section>
+
                 {/* Supervisor Review Decision block */}
-                 {selectedSubmission.status === 'PENDING' ? (
+                 {selectedSubmission.status === 'PENDING' || selectedSubmission.status === 'REQUEST_REJECT' ? (
                   <section className="bg-white border border-[#c5c5d3] rounded-xl p-5 shadow-sm space-y-4">
                     <h3 className="font-bold text-sm text-[#00236f] m-0">Review Decision</h3>
                     
@@ -630,9 +1097,18 @@ export default function ApprovalInboxView({
                     </div>
 
                     <div className="flex flex-wrap gap-2 justify-end">
-                      <Button 
+                      {selectedSubmission?.status === 'PENDING' && (selectedSubmission.submitterName === inspectorName || selectedSubmission.progress.pic === 'CURRENT' || selectedSubmission.progress.leader === 'CURRENT' || selectedSubmission.progress.spv === 'CURRENT') && (
+                        <button
+                          onClick={() => setShowRequestRejectModal(true)}
+                          className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors cursor-pointer select-none active:scale-95 mr-auto"
+                        >
+                          Request Reject
+                        </button>
+                      )}
+                       <Button 
                         variant="destructive"
                         onClick={handleReject}
+                        disabled={isReviewing}
                         className="flex items-center gap-1.5 transition-colors"
                       >
                         <Ban size={14} /> Reject &amp; Return for Recalibration
@@ -640,6 +1116,7 @@ export default function ApprovalInboxView({
                       <Button 
                         variant="secondary"
                         onClick={handleApproveWaiver}
+                        disabled={isReviewing}
                         className="flex items-center gap-1.5 transition-colors border border-[#00236f]/30"
                       >
                         <ThumbsUp size={14} /> Approve Waiver Exception
@@ -647,6 +1124,7 @@ export default function ApprovalInboxView({
                       <Button 
                         variant="default"
                         onClick={handleAdvance}
+                        disabled={isReviewing}
                         className="flex items-center gap-1.5 transition-colors"
                       >
                         <CheckCircle size={14} /> Approve &amp; Advance Stage
@@ -718,6 +1196,39 @@ export default function ApprovalInboxView({
         )}
 
       </div>
+
+      {showRequestRejectModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 flex flex-col gap-4">
+            <h3 className="text-base font-semibold text-[#191c1d]">Request Reject</h3>
+            <p className="text-sm text-[#757682]">
+              Provide a reason for requesting rejection. This will be visible to all approvers.
+            </p>
+            <textarea
+              className="w-full border border-[#c5c5d3] rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-[#00236f]"
+              rows={4}
+              placeholder="State the reason for reject request..."
+              value={requestRejectRemark}
+              onChange={(e) => setRequestRejectRemark(e.target.value)}
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setShowRequestRejectModal(false); setRequestRejectRemark(''); }}
+                className="px-4 py-2 rounded-lg border border-[#c5c5d3] text-sm text-[#444651] hover:bg-gray-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestReject}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 cursor-pointer"
+              >
+                Submit Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   Plus,
   Compass
 } from 'lucide-react';
+import AiinaLogo from './AiinaLogo';
 
 interface SidebarProps {
   currentTab: string;
@@ -34,14 +35,8 @@ export default function Sidebar({
   return (
     <nav className="hidden md:flex flex-col h-screen w-60 bg-white border-r border-[#c5c5d3] z-50 fixed left-0 top-0">
       {/* Brand Header */}
-      <div className="p-5 border-b border-[#c5c5d3] flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-[#dce1ff] overflow-hidden flex items-center justify-center shrink-0">
-          <span className="font-bold text-[#00236f] text-lg">IQ</span>
-        </div>
-        <div className="overflow-hidden">
-          <h1 className="font-extrabold text-[#00236f] text-lg leading-tight truncate">Industrial QC</h1>
-          <p className="text-xs text-[#444651] truncate">Quality Control Team</p>
-        </div>
+      <div className="p-5 border-b border-[#c5c5d3] flex items-center justify-start">
+        <AiinaLogo size="md" />
       </div>
 
       {/* Primary CTA */}

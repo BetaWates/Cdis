@@ -74,10 +74,10 @@ export const INITIAL_SUBMISSIONS: DailyCheckSubmission[] = [
     priority: 'NORMAL',
     progress: { pic: 'APPROVED', leader: 'APPROVED', spv: 'CURRENT', manager: 'PENDING' },
     measurements: [
-      { paramName: 'Wall Thickness', standardValue: '5.00', tolerance: '±0.10', unit: 'mm', measuredValue: '5.02', status: 'OK' },
-      { paramName: 'Outer Diameter', standardValue: '120.50', tolerance: '±0.25', unit: 'mm', measuredValue: '120.45', status: 'OK' },
-      { paramName: 'Inner Bore Alignment', standardValue: '0.00', tolerance: '+0.05', unit: 'mm', measuredValue: '0.01', status: 'OK' },
-      { paramName: 'Surface Roughness (Ra)', standardValue: '0.80', tolerance: 'MAX', unit: 'µm', measuredValue: '0.65', status: 'OK' }
+      { paramName: 'Wall Thickness', standardValue: '5.00', tolerance: '±0.10', unit: 'mm', measuredValue: '5.02 | 5.01 | 5.03', status: 'OK', shiftIValue: '5.02', shiftIStatus: 'OK', shiftIIValue: '5.01', shiftIIStatus: 'OK', shiftIIIValue: '5.03', shiftIIIStatus: 'OK' },
+      { paramName: 'Outer Diameter', standardValue: '120.50', tolerance: '±0.25', unit: 'mm', measuredValue: '120.45 | 120.55 | 120.42', status: 'OK', shiftIValue: '120.45', shiftIStatus: 'OK', shiftIIValue: '120.55', shiftIIStatus: 'OK', shiftIIIValue: '120.42', shiftIIIStatus: 'OK' },
+      { paramName: 'Inner Bore Alignment', standardValue: '0.00', tolerance: '+0.05', unit: 'mm', measuredValue: '0.01 | 0.02 | 0.01', status: 'OK', shiftIValue: '0.01', shiftIStatus: 'OK', shiftIIValue: '0.02', shiftIIStatus: 'OK', shiftIIIValue: '0.01', shiftIIIStatus: 'OK' },
+      { paramName: 'Surface Roughness (Ra)', standardValue: '0.80', tolerance: 'MAX', unit: 'µm', measuredValue: '0.65 | 0.70 | 0.62', status: 'OK', shiftIValue: '0.65', shiftIStatus: 'OK', shiftIIValue: '0.70', shiftIIStatus: 'OK', shiftIIIValue: '0.62', shiftIIIStatus: 'OK' }
     ],
     activityLog: [
       { id: 'al-11', time: 'Oct 24, 09:10 AM', action: 'Inspection Started', user: 'John Doe', details: 'Started checking batch', type: 'start' },
@@ -98,8 +98,8 @@ export const INITIAL_SUBMISSIONS: DailyCheckSubmission[] = [
     priority: 'HIGH',
     progress: { pic: 'APPROVED', leader: 'CURRENT', spv: 'PENDING', manager: 'PENDING' },
     measurements: [
-      { paramName: 'Joint Gap', standardValue: '2.50', tolerance: '±0.20', unit: 'mm', measuredValue: '2.85', status: 'NG' },
-      { paramName: 'Fastener Torque', standardValue: '45.00', tolerance: '±5.00', unit: 'Nm', measuredValue: '42.50', status: 'OK' }
+      { paramName: 'Joint Gap', standardValue: '2.50', tolerance: '±0.20', unit: 'mm', measuredValue: '2.85 | 2.48 | 2.52', status: 'NG', shiftIValue: '2.85', shiftIStatus: 'NG', shiftIIValue: '2.48', shiftIIStatus: 'OK', shiftIIIValue: '2.52', shiftIIIStatus: 'OK' },
+      { paramName: 'Fastener Torque', standardValue: '45.00', tolerance: '±5.00', unit: 'Nm', measuredValue: '42.50 | 44.10 | 43.80', status: 'OK', shiftIValue: '42.50', shiftIStatus: 'OK', shiftIIValue: '44.10', shiftIIStatus: 'OK', shiftIIIValue: '43.80', shiftIIIStatus: 'OK' }
     ],
     activityLog: [
       { id: 'al-21', time: 'Oct 24, 07:50 AM', action: 'Inspection Started', user: 'Jane Smith', details: 'Verification sequence initiated', type: 'start' },
@@ -121,8 +121,8 @@ export const INITIAL_SUBMISSIONS: DailyCheckSubmission[] = [
     priority: 'NORMAL',
     progress: { pic: 'APPROVED', leader: 'APPROVED', spv: 'APPROVED', manager: 'CURRENT' },
     measurements: [
-      { paramName: 'Paint Thickness', standardValue: '120', tolerance: '±20', unit: 'µm', measuredValue: '125', status: 'OK' },
-      { paramName: 'Color Consistency (Delta E)', standardValue: '1.0', tolerance: 'MAX', unit: '-', measuredValue: '0.82', status: 'OK' }
+      { paramName: 'Paint Thickness', standardValue: '120', tolerance: '±20', unit: 'µm', measuredValue: '125 | 118 | 122', status: 'OK', shiftIValue: '125', shiftIStatus: 'OK', shiftIIValue: '118', shiftIIStatus: 'OK', shiftIIIValue: '122', shiftIIIStatus: 'OK' },
+      { paramName: 'Color Consistency (Delta E)', standardValue: '1.0', tolerance: 'MAX', unit: '-', measuredValue: '0.82 | 0.75 | 0.88', status: 'OK', shiftIValue: '0.82', shiftIStatus: 'OK', shiftIIValue: '0.75', shiftIIStatus: 'OK', shiftIIIValue: '0.88', shiftIIIStatus: 'OK' }
     ],
     activityLog: [
       { id: 'al-31', time: 'Oct 23, 04:15 PM', action: 'Inspection Started', user: 'Mike Johnson', details: 'Initiated visual inspection', type: 'start' },
@@ -143,10 +143,10 @@ export const INITIAL_SUBMISSIONS: DailyCheckSubmission[] = [
     priority: 'HIGH',
     progress: { pic: 'CURRENT', leader: 'PENDING', spv: 'PENDING', manager: 'PENDING' },
     measurements: [
-      { paramName: 'Bore Diameter A', standardValue: '85.00', tolerance: '±0.05', unit: 'mm', measuredValue: '85.02', status: 'OK' },
-      { paramName: 'Bore Diameter B', standardValue: '85.00', tolerance: '±0.05', unit: 'mm', measuredValue: '84.98', status: 'OK' },
-      { paramName: 'Deck Flatness', standardValue: '0.05', tolerance: 'MAX', unit: 'mm', measuredValue: '0.08', status: 'NG' },
-      { paramName: 'Surface Finish (Visual)', standardValue: 'No scratches', tolerance: '-', unit: '-', measuredValue: 'Clean', status: 'OK' }
+      { paramName: 'Bore Diameter A', standardValue: '85.00', tolerance: '±0.05', unit: 'mm', measuredValue: '85.02 | 84.99 | 85.01', status: 'OK', shiftIValue: '85.02', shiftIStatus: 'OK', shiftIIValue: '84.99', shiftIIStatus: 'OK', shiftIIIValue: '85.01', shiftIIIStatus: 'OK' },
+      { paramName: 'Bore Diameter B', standardValue: '85.00', tolerance: '±0.05', unit: 'mm', measuredValue: '84.98 | 85.03 | 85.02', status: 'OK', shiftIValue: '84.98', shiftIStatus: 'OK', shiftIIValue: '85.03', shiftIIStatus: 'OK', shiftIIIValue: '85.02', shiftIIIStatus: 'OK' },
+      { paramName: 'Deck Flatness', standardValue: '0.05', tolerance: 'MAX', unit: 'mm', measuredValue: '0.08 | 0.04 | 0.03', status: 'NG', shiftIValue: '0.08', shiftIStatus: 'NG', shiftIIValue: '0.04', shiftIIStatus: 'OK', shiftIIIValue: '0.03', shiftIIIStatus: 'OK' },
+      { paramName: 'Surface Finish (Visual)', standardValue: 'No scratches', tolerance: '-', unit: '-', measuredValue: 'Clean | Clean | Clean', status: 'OK', shiftIValue: 'Clean', shiftIStatus: 'OK', shiftIIValue: 'Clean', shiftIIStatus: 'OK', shiftIIIValue: 'Clean', shiftIIIStatus: 'OK' }
     ],
     activityLog: [
       { id: 'al-41', time: 'Oct 24, 08:15 AM', action: 'Inspection Started', user: 'J. Smith', details: 'Verification sequence initiated', type: 'start' },

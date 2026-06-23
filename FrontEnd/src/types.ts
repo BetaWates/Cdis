@@ -33,6 +33,13 @@ export interface MeasurementEntry {
   status: 'OK' | 'NG' | '--';
   inputMode?: InputMode;
   handwritingData?: string;
+  // Shift inputs
+  shiftIValue?: string;
+  shiftIStatus?: 'OK' | 'NG' | '--';
+  shiftIIValue?: string;
+  shiftIIStatus?: 'OK' | 'NG' | '--';
+  shiftIIIValue?: string;
+  shiftIIIStatus?: 'OK' | 'NG' | '--';
 }
 
 export interface ActivityLogEntry {
@@ -56,7 +63,7 @@ export interface DailyCheckSubmission {
   submitterDept: string;
   submittedDate: string;
   submittedAt?: string;
-  status: 'PENDING' | 'APPROVED_EXCEPTION' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED_EXCEPTION' | 'REJECTED' | 'REQUEST_REJECT';
   priority: 'HIGH' | 'NORMAL';
   progress: {
     pic: ApprovalProgressState;
@@ -66,5 +73,7 @@ export interface DailyCheckSubmission {
   };
   measurements: MeasurementEntry[];
   reviewNotes?: string;
+  rejectRequestRemark?: string;
+  reviewerName?: string;
   activityLog: ActivityLogEntry[];
 }
