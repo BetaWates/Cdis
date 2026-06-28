@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { DailyCheckSubmission, ApprovalProgressState } from '../types';
+import { DailyCheckSubmission } from '../types';
 import { triggerApprovalEmail, getNextStage, ApprovalStage } from '../utils/notifications';
+
+const TOKEN_KEY = 'aiina_auth_token';
+
+function authHeaders(contentType = true): HeadersInit {
+  const token = localStorage.getItem(TOKEN_KEY);
+  return {
+    ...(contentType ? { 'Content-Type': 'application/json' } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 function getCurrentStage(progress: DailyCheckSubmission['progress']): ApprovalStage | null {
   if (progress.pic === 'CURRENT') return 'PIC';
@@ -15,10 +25,12 @@ export function useSubmissions() {
 
   const fetchSubmissions = useCallback(async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/daily-checks`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/daily-checks?limit=50`, {
+        headers: authHeaders(false),
+      });
       if (res.ok) {
         const data = await res.json();
-        setSubmissions(data);
+        setSubmissions(Array.isArray(data) ? data : data.data || []);
       }
     } catch (err) {
       console.error('[useSubmissions] Failed to fetch submissions:', err);
@@ -34,7 +46,7 @@ export function useSubmissions() {
       setSubmissions((prev) => [newSub, ...prev]);
       await fetch(`${import.meta.env.VITE_API_URL}/api/daily-checks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(newSub)
       });
       triggerApprovalEmail({ submissionId: newSub.id, modelName: newSub.modelName, sampleId: newSub.sampleId, submitterName: newSub.submitterName, currentStage: 'PIC', nextStage: 'PIC' });
@@ -56,7 +68,7 @@ export function useSubmissions() {
 
       await fetch(`${import.meta.env.VITE_API_URL}/api/approvals/${submissionId}/advance`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ reviewerName, reviewNotes })
       });
       fetchSubmissions();
@@ -69,7 +81,7 @@ export function useSubmissions() {
     try {
       await fetch(`${import.meta.env.VITE_API_URL}/api/approvals/${submissionId}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ reviewerName, reviewNotes })
       });
       fetchSubmissions();
@@ -82,7 +94,7 @@ export function useSubmissions() {
     try {
       await fetch(`${import.meta.env.VITE_API_URL}/api/approvals/${id}/request-reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ requesterName, remark })
       });
       fetchSubmissions();
@@ -95,7 +107,7 @@ export function useSubmissions() {
     try {
       await fetch(`${import.meta.env.VITE_API_URL}/api/approvals/${submissionId}/exception`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ reviewerName, reviewNotes })
       });
       fetchSubmissions();
@@ -106,7 +118,10 @@ export function useSubmissions() {
 
   const resetToDefaults = useCallback(async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/daily-checks/reset`, { method: 'POST' });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/daily-checks/reset`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
       if (res.ok) {
         fetchSubmissions();
       }

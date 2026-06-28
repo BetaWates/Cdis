@@ -2,12 +2,24 @@ import { useState, useEffect, useCallback } from 'react';
 import { MasterForm } from '../types';
 import { parseExcelFile } from '../utils/excelParser';
 
+const TOKEN_KEY = 'aiina_auth_token';
+
+function authHeaders(contentType = true): HeadersInit {
+  const token = localStorage.getItem(TOKEN_KEY);
+  return {
+    ...(contentType ? { 'Content-Type': 'application/json' } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export function useMasterForms() {
   const [masterForms, setMasterForms] = useState<MasterForm[]>([]);
 
   const fetchForms = useCallback(async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/master-forms`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/master-forms`, {
+        headers: authHeaders(false),
+      });
       if (res.ok) {
         const data = await res.json();
         setMasterForms(data);
@@ -34,28 +46,44 @@ export function useMasterForms() {
     setMasterForms((prev) => [processingForm, ...prev]);
 
     try {
-      const [parsedSpecs, pdfDataUrl] = await Promise.all([
-        parseExcelFile(excelFile),
-        pdfFile ? readFileAsDataUrl(pdfFile) : Promise.resolve(undefined),
-      ]);
-      const pdfData = pdfDataUrl ? pdfDataUrl.split(',')[1] : undefined;
-      
+      const parsedSpecs = await parseExcelFile(excelFile);
+      let pdfStorageUrl: string | undefined;
+
+      if (pdfFile) {
+        const formData = new FormData();
+        formData.append('pdf', pdfFile);
+        const uploadRes = await fetch(`${import.meta.env.VITE_API_URL}/api/files/upload-pdf`, {
+          method: 'POST',
+          headers: authHeaders(false),
+          body: formData,
+        });
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json().catch(() => ({}));
+          throw new Error(err.error || 'PDF upload failed');
+        }
+        const { url } = await uploadRes.json();
+        pdfStorageUrl = url;
+      }
+
       const parsedForm: MasterForm = {
         ...processingForm,
         status: 'ACTIVE',
         specifications: parsedSpecs,
-        pdfDataUrl,
+        pdfDataUrl: pdfStorageUrl,
         pdfFileName: pdfFile?.name,
-        pdfData,
-        imageUrl: pdfDataUrl ?? 'https://lh3.googleusercontent.com/aida-public/AB6AXuCQB9fuWG6sU5Pmvv6mHj2G3UEB6xgV8qB5fAoPYff17YYvnBL9lh-jtoecg269YmsL8N6rKmBVnZYDt5rSS-IjMk28MlxpmfSX5PnKcLJveXt04CSz_TETbhc_6CFvzfBRjJNwjkm8U-Z-xWy3TmL9LKb28Gn7atfGwvHkO0JvD4uskcrN7j5YH02M8IHz6p9FD1Dt0hSIrHuf3nKGcqVMfETXbaHbZ9UbGeziP9bk2sTGHco54M9MA0EVQjOtdHpgIQxkZK_f09w',
+        imageUrl: pdfStorageUrl ?? '/placeholder-form.svg',
       };
 
-      // POST to backend live MySQL database
-      await fetch(`${import.meta.env.VITE_API_URL}/api/master-forms`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/master-forms`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(parsedForm)
       });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to save master form');
+      }
 
       setMasterForms((prev) => prev.map((f) => f.id === formId ? parsedForm : f));
     } catch (err) {
@@ -67,7 +95,10 @@ export function useMasterForms() {
 
   const resetToDefaults = useCallback(async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/master-forms/reset`, { method: 'POST' });
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/master-forms/reset`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
       if (res.ok) {
         fetchForms();
       }
@@ -77,13 +108,4 @@ export function useMasterForms() {
   }, [fetchForms]);
 
   return { masterForms, setMasterForms, addMasterFormWithParsing, resetToDefaults };
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }

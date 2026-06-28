@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import Sidebar from './components/Sidebar';
+import Sidebar from './components/layout/Sidebar';
 import DashboardView from './components/DashboardView';
 import MasterFormsView from './components/MasterFormsView';
 import DailyChecksView from './components/DailyChecksView';
 import ApprovalInboxView from './components/ApprovalInboxView';
 import SettingsView from './components/SettingsView';
-import AiinaLogo from './components/AiinaLogo';
+import AiinaLogo from './components/layout/AiinaLogo';
+import LoginView from './components/LoginView';
 import { Menu, X } from 'lucide-react';
 import { useMasterForms } from './hooks/useMasterForms';
 import { useSubmissions } from './hooks/useSubmissions';
+import { useAuth } from './contexts/AuthContext';
 
 const INSPECTOR_NAME_KEY = 'industrial_qc_inspector_name_v1';
 
@@ -22,11 +24,26 @@ function getInitialInspectorName(): string {
 }
 
 export default function App() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center">
+        <p className="text-sm text-[#757682]">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) return <LoginView />;
+
+  return <AuthenticatedApp />;
+}
+
+function AuthenticatedApp() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [inspectorName, setInspectorNameState] = useState<string>(getInitialInspectorName);
 
-  // Custom hooks — replace direct localStorage calls
   const {
     masterForms,
     setMasterForms,
@@ -70,8 +87,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] text-[#191c1d] flex flex-col md:flex-row antialiased">
-
-      {/* Mobile Top Header */}
       <header className="md:hidden flex items-center justify-between px-5 py-3.5 bg-white border-b border-[#c5c5d3] sticky top-0 z-40">
         <div className="flex items-center gap-3">
           <AiinaLogo size="sm" />
@@ -85,7 +100,6 @@ export default function App() {
         </button>
       </header>
 
-      {/* Mobile Menu Drawer Overlay */}
       {isMobileMenuOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
@@ -124,7 +138,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Desktop Sidebar */}
       <Sidebar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
@@ -132,9 +145,7 @@ export default function App() {
         onNewInspection={() => { setCurrentTab('daily-checks'); setIsMobileMenuOpen(false); }}
       />
 
-      {/* Main Content */}
       <main className="flex-1 min-h-screen flex flex-col md:pl-60">
-
         {currentTab === 'dashboard' && (
           <DashboardView
             masterForms={masterForms}
@@ -163,7 +174,6 @@ export default function App() {
         {currentTab === 'approval-inbox' && (
           <ApprovalInboxView
             submissions={submissions}
-            setSubmissions={setSubmissions}
             inspectorName={inspectorName}
             pendingCounts={pendingCounts}
             onAdvanceApproval={advanceApproval}
@@ -181,7 +191,6 @@ export default function App() {
             instructorEmail="inspector.smith@aiina.co.id"
           />
         )}
-
       </main>
     </div>
   );

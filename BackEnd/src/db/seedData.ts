@@ -3,6 +3,11 @@ const getPastDateStr = (hoursAgo: number): string => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
+const getPastIso = (hoursAgo: number): string => {
+  const d = new Date(Date.now() - hoursAgo * 3600 * 1000);
+  return d.toISOString();
+};
+
 export const INITIAL_MASTER_FORMS = [
   {
     id: 'f-1',
@@ -71,9 +76,9 @@ export const INITIAL_SUBMISSIONS = [
       { paramName: 'Seal Thickness', standardValue: '3.00', tolerance: '±0.15', unit: 'mm', measuredValue: '3.05 | 2.98 | 3.02', status: 'OK', shiftIValue: '3.05', shiftIStatus: 'OK', shiftIIValue: '2.98', shiftIIStatus: 'OK', shiftIIIValue: '3.02', shiftIIIStatus: 'OK' }
     ],
     activityLog: [
-      { id: 'al-11', time: getPastDateStr(5), action: 'Inspection Started', user: 'Andi Pratama', details: 'QC Line check sequence initiated.', type: 'start' },
-      { id: 'al-12', time: getPastDateStr(4.5), action: 'NG Flagged', user: 'System', details: 'Housing Gap out of tolerance limit (1.85 mm).', type: 'flag' },
-      { id: 'al-13', time: getPastDateStr(4), action: 'Submitted for Review', user: 'Andi Pratama', details: 'Form submitted to Line Leader.', type: 'submit' }
+      { id: 'al-11', timestamp: getPastIso(5), action: 'Inspection Started', user: 'Andi Pratama', details: 'QC Line check sequence initiated.', type: 'start' },
+      { id: 'al-12', timestamp: getPastIso(4.5), action: 'NG Flagged', user: 'System', details: 'Housing Gap out of tolerance limit (1.85 mm).', type: 'flag' },
+      { id: 'al-13', timestamp: getPastIso(4), action: 'Submitted for Review', user: 'Andi Pratama', details: 'Form submitted to Line Leader.', type: 'submit' }
     ]
   },
   {
@@ -96,8 +101,8 @@ export const INITIAL_SUBMISSIONS = [
       { paramName: 'Housing Gap', standardValue: '1.80', tolerance: '±0.25', unit: 'mm', measuredValue: '1.75 | 1.82 | 1.78', status: 'OK', shiftIValue: '1.75', shiftIStatus: 'OK', shiftIIValue: '1.82', shiftIIStatus: 'OK', shiftIIIValue: '1.78', shiftIIIStatus: 'OK' }
     ],
     activityLog: [
-      { id: 'al-21', time: getPastDateStr(27), action: 'Inspection Started', user: 'Budi Santoso', details: 'Production verification sequence initiated.', type: 'start' },
-      { id: 'al-22', time: getPastDateStr(26), action: 'Submitted for Review', user: 'Budi Santoso', details: 'Inspection checks finished and submitted.', type: 'submit' }
+      { id: 'al-21', timestamp: getPastIso(27), action: 'Inspection Started', user: 'Budi Santoso', details: 'Production verification sequence initiated.', type: 'start' },
+      { id: 'al-22', timestamp: getPastIso(26), action: 'Submitted for Review', user: 'Budi Santoso', details: 'Inspection checks finished and submitted.', type: 'submit' }
     ]
   },
   {
@@ -121,10 +126,10 @@ export const INITIAL_SUBMISSIONS = [
       { paramName: 'Housing Gap', standardValue: '2.00', tolerance: '±0.30', unit: 'mm', measuredValue: '2.02 | 1.95 | 1.98', status: 'OK', shiftIValue: '2.02', shiftIStatus: 'OK', shiftIIValue: '1.95', shiftIIStatus: 'OK', shiftIIIValue: '1.98', shiftIIIStatus: 'OK' }
     ],
     activityLog: [
-      { id: 'al-31', time: getPastDateStr(54), action: 'Inspection Started', user: 'Citra Dewi', details: 'Initiated check list.', type: 'start' },
-      { id: 'al-32', time: getPastDateStr(53.5), action: 'NG Flagged', user: 'System', details: 'Pressure Drop out of tolerance (174 Pa) in Shift I.', type: 'flag' },
-      { id: 'al-33', time: getPastDateStr(52), action: 'Submitted for Review', user: 'Citra Dewi', details: 'Escalated with waiver request to supervisor.', type: 'submit' },
-      { id: 'al-34', time: getPastDateStr(50), action: 'Approved Exception', user: 'Bambang (QC Spv)', details: 'Approved exception with review notes.', type: 'approve' }
+      { id: 'al-31', timestamp: getPastIso(54), action: 'Inspection Started', user: 'Citra Dewi', details: 'Initiated check list.', type: 'start' },
+      { id: 'al-32', timestamp: getPastIso(53.5), action: 'NG Flagged', user: 'System', details: 'Pressure Drop out of tolerance (174 Pa) in Shift I.', type: 'flag' },
+      { id: 'al-33', timestamp: getPastIso(52), action: 'Submitted for Review', user: 'Citra Dewi', details: 'Escalated with waiver request to supervisor.', type: 'submit' },
+      { id: 'al-34', timestamp: getPastIso(50), action: 'Approved Exception', user: 'Bambang (QC Spv)', details: 'Approved exception with review notes.', type: 'approve' }
     ]
   },
   {
@@ -149,9 +154,9 @@ export const INITIAL_SUBMISSIONS = [
       { paramName: 'Seal Thickness', standardValue: '3.00', tolerance: '±0.15', unit: 'mm', measuredValue: '3.01 | 2.99 | 3.00', status: 'OK', shiftIValue: '3.01', shiftIStatus: 'OK', shiftIIValue: '2.99', shiftIIStatus: 'OK', shiftIIIValue: '3.00', shiftIIIStatus: 'OK' }
     ],
     activityLog: [
-      { id: 'al-41', time: getPastDateStr(16), action: 'Inspection Started', user: 'Deni Kurniawan', details: 'Calibration verification initiated.', type: 'start' },
-      { id: 'al-42', time: getPastDateStr(15), action: 'NG Flagged', user: 'System', details: 'Multiple Shift III parameters out of range.', type: 'flag' },
-      { id: 'al-43', time: getPastDateStr(14), action: 'Submitted for Review', user: 'Deni Kurniawan', details: 'Escalated with request for reject and recalibration sequence.', type: 'submit' }
+      { id: 'al-41', timestamp: getPastIso(16), action: 'Inspection Started', user: 'Deni Kurniawan', details: 'Calibration verification initiated.', type: 'start' },
+      { id: 'al-42', timestamp: getPastIso(15), action: 'NG Flagged', user: 'System', details: 'Multiple Shift III parameters out of range.', type: 'flag' },
+      { id: 'al-43', timestamp: getPastIso(14), action: 'Submitted for Review', user: 'Deni Kurniawan', details: 'Escalated with request for reject and recalibration sequence.', type: 'submit' }
     ]
   }
 ];
