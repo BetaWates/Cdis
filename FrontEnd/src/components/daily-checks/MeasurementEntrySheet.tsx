@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { DailyCheckSubmission, MeasurementEntry, ActivityLogEntry, MasterForm } from '../../types';
 import { MeasurementRow, RowState, InputMethod } from './MeasurementRow';
 import { evaluateStatus } from '../../utils/toleranceEvaluator';
+import { spokenNumberToDigit } from '../../utils/spokenNumberToDigit';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -226,14 +227,15 @@ export function MeasurementEntrySheet({
           updateRow(specId, { voiceState: 'processing' });
 
           const transcript = event.results[0][0].transcript;
-          const cleaned = transcript.replace(/[^0-9.\-]/g, '').trim();
+          const converted = spokenNumberToDigit(transcript);
+          const parsedValue = parseFloat(converted);
           const activeShift = rowStates[specId]?.activeShift ?? 'I';
           const updateKey =
             activeShift === 'II' ? 'shiftIIValue' : activeShift === 'III' ? 'shiftIIIValue' : 'shiftIValue';
           
-          if (cleaned && !isNaN(Number(cleaned))) {
+          if (!isNaN(parsedValue)) {
             updateRow(specId, { 
-              [updateKey]: cleaned,
+              [updateKey]: converted,
               voiceState: 'idle',
               voiceError: ''
             });
