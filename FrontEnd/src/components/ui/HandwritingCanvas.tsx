@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
 interface HandwritingCanvasProps {
@@ -11,6 +11,7 @@ interface HandwritingCanvasProps {
   height?: number;
   className?: string;
   disabled?: boolean;
+  isRecognizing?: boolean;
 }
 
 /**
@@ -25,6 +26,7 @@ export function HandwritingCanvas({
   height = 56,
   className,
   disabled = false,
+  isRecognizing = false,
 }: HandwritingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -54,18 +56,18 @@ export function HandwritingCanvas({
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (disabled) return;
+      if (disabled || isRecognizing) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       isDrawing.current = true;
       lastPos.current = getPos(e);
       setHasStrokes(true);
     },
-    [disabled]
+    [disabled, isRecognizing]
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!isDrawing.current || disabled) return;
+      if (!isDrawing.current || disabled || isRecognizing) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -82,7 +84,7 @@ export function HandwritingCanvas({
       ctx.stroke();
       lastPos.current = pos;
     },
-    [disabled]
+    [disabled, isRecognizing]
   );
 
   const onPointerUp = useCallback(() => {
@@ -110,7 +112,7 @@ export function HandwritingCanvas({
       <div
         className={cn(
           'relative border rounded-lg overflow-hidden bg-white',
-          disabled ? 'border-[#c5c5d3] opacity-50' : 'border-[#00236f]/40 hover:border-[#00236f]',
+          disabled || isRecognizing ? 'border-[#c5c5d3] opacity-50' : 'border-[#00236f]/40 hover:border-[#00236f]',
           'cursor-crosshair'
         )}
         style={{ width, height }}
@@ -124,6 +126,11 @@ export function HandwritingCanvas({
             Write here
           </span>
         )}
+        {isRecognizing && (
+          <div className="absolute inset-0 bg-white/70 flex items-center justify-center pointer-events-none z-10">
+            <Loader2 size={16} className="animate-spin text-[#00236f]" />
+          </div>
+        )}
         <canvas
           ref={canvasRef}
           width={width * 2}   // 2× for retina sharpness
@@ -135,7 +142,7 @@ export function HandwritingCanvas({
           onPointerLeave={onPointerUp}
         />
       </div>
-      {hasStrokes && !disabled && (
+      {hasStrokes && !disabled && !isRecognizing && (
         <button
           type="button"
           onClick={handleClear}

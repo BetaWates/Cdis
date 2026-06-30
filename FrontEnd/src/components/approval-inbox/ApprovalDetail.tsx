@@ -169,10 +169,17 @@ export function ApprovalDetail({
                     const statusII = m.shiftIIStatus || m.status;
                     const statusIII = m.shiftIIIStatus || m.status;
 
-                    const shiftBadge = (label: string, val: string, st: string) => (
+                    const shiftBadge = (label: string, val: string, st: string, isHw?: boolean) => (
                       <div className="flex items-center gap-2">
                         <span className="text-[9px] text-[#757682] font-bold uppercase w-12">{label}:</span>
-                        <span className={st === 'NG' ? 'text-[#ba1a1a] font-bold' : 'text-slate-800 font-medium'}>{val} {m.unit}</span>
+                        <span className={st === 'NG' ? 'text-[#ba1a1a] font-bold' : 'text-slate-800 font-medium'}>
+                          {val} {m.unit}
+                          {isHw && (
+                            <span className="ml-1.5 text-[8px] bg-blue-50 text-[#00236f] border border-blue-200 px-1 py-0.2 rounded font-bold uppercase" title="Recognized via handwriting">
+                              ✏️ OCR
+                            </span>
+                          )}
+                        </span>
                         <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${
                           st === 'OK' ? 'bg-green-50 text-green-700 border-green-200'
                           : st === 'NG' ? 'bg-red-100 text-[#ba1a1a] border-red-200'
@@ -192,9 +199,9 @@ export function ApprovalDetail({
                         <TableCell className="text-[#757682] font-mono">{m.tolerance}</TableCell>
                         <TableCell className="font-mono text-xs">
                           <div className="flex flex-col gap-1 py-1">
-                            {shiftBadge('Shift I', valI ?? '', statusI ?? '')}
-                            {shiftBadge('Shift II', valII ?? '', statusII ?? '')}
-                            {shiftBadge('Shift III', valIII ?? '', statusIII ?? '')}
+                            {shiftBadge('Shift I', valI ?? '', statusI ?? '', m.shiftIHandwritten)}
+                            {shiftBadge('Shift II', valII ?? '', statusII ?? '', m.shiftIIHandwritten)}
+                            {shiftBadge('Shift III', valIII ?? '', statusIII ?? '', m.shiftIIIHandwritten)}
                             {m.handwritingData && (
                               <div className="mt-1 flex flex-col gap-0.5 items-start">
                                 <span className="text-[8px] text-[#757682] uppercase font-bold">Ref Handwriting:</span>

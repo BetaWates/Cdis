@@ -59,11 +59,11 @@ export function exportToExcel(submission: DailyCheckSubmission): void {
       m.standardValue || '',
       m.tolerance || '',
       m.unit || '',
-      valI,
+      `${valI}${m.shiftIHandwritten ? ' (OCR)' : ''}`,
       statusI,
-      valII,
+      `${valII}${m.shiftIIHandwritten ? ' (OCR)' : ''}`,
       statusII,
-      valIII,
+      `${valIII}${m.shiftIIIHandwritten ? ' (OCR)' : ''}`,
       statusIII
     ]);
   });
@@ -157,12 +157,13 @@ export function exportToPDF(submission: DailyCheckSubmission): void {
     const statusI = m.shiftIStatus || m.status;
     const statusII = m.shiftIIStatus || m.status;
     const statusIII = m.shiftIIIStatus || m.status;
+    const ocrStr = (isHw?: boolean) => isHw ? ' (OCR)' : '';
     return [
       String(index + 1).padStart(2, '0'),
       m.paramName,
       `${m.standardValue} ${m.unit}`,
       m.tolerance,
-      `Shift I: ${valI} (${statusI})\nShift II: ${valII} (${statusII})\nShift III: ${valIII} (${statusIII})`,
+      `Shift I: ${valI}${ocrStr(m.shiftIHandwritten)} (${statusI})\nShift II: ${valII}${ocrStr(m.shiftIIHandwritten)} (${statusII})\nShift III: ${valIII}${ocrStr(m.shiftIIIHandwritten)} (${statusIII})`,
       m.status
     ];
   });
