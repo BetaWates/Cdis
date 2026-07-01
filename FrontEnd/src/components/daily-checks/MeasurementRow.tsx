@@ -54,14 +54,19 @@ export const MeasurementRow = memo(function MeasurementRow({
   onStopVoice,
   onMethodChange,
 }: MeasurementRowProps) {
-  const statusI = evaluateStatus(row.shiftIValue, spec.standardValue, spec.tolerance);
-  const statusII = evaluateStatus(row.shiftIIValue, spec.standardValue, spec.tolerance);
-  const statusIII = evaluateStatus(row.shiftIIIValue, spec.standardValue, spec.tolerance);
+  const isVisual = (spec as any).inputType === 'visual' || (spec as any).input_type === 'visual';
+  const statusI = isVisual ? (row.shiftIValue || '--') : evaluateStatus(row.shiftIValue, spec.standardValue, spec.tolerance);
+  const statusII = isVisual ? (row.shiftIIValue || '--') : evaluateStatus(row.shiftIIValue, spec.standardValue, spec.tolerance);
+  const statusIII = isVisual ? (row.shiftIIIValue || '--') : evaluateStatus(row.shiftIIIValue, spec.standardValue, spec.tolerance);
   const isOverallNG = statusI === 'NG' || statusII === 'NG' || statusIII === 'NG';
 
   const [autoRecognize, setAutoRecognize] = useState<boolean>(true);
   const [isRecognizing, setIsRecognizing] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  const [shiftIJudgment, setShiftIJudgment] = useState<'OK' | 'NG' | null>((row.shiftIValue as 'OK' | 'NG') || null);
+  const [shiftIIJudgment, setShiftIIJudgment] = useState<'OK' | 'NG' | null>((row.shiftIIValue as 'OK' | 'NG') || null);
+  const [shiftIIIJudgment, setShiftIIIJudgment] = useState<'OK' | 'NG' | null>((row.shiftIIIValue as 'OK' | 'NG') || null);
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const ocrRequestIdRef = useRef<number>(0);
@@ -73,6 +78,34 @@ export const MeasurementRow = memo(function MeasurementRow({
       }
     };
   }, []);
+
+  useEffect(() => {
+    setShiftIJudgment((row.shiftIValue as 'OK' | 'NG') || null);
+  }, [row.shiftIValue]);
+
+  useEffect(() => {
+    setShiftIIJudgment((row.shiftIIValue as 'OK' | 'NG') || null);
+  }, [row.shiftIIValue]);
+
+  useEffect(() => {
+    setShiftIIIJudgment((row.shiftIIIValue as 'OK' | 'NG') || null);
+  }, [row.shiftIIIValue]);
+
+  const handleJudgmentChange = useCallback((shift: 'I' | 'II' | 'III', value: 'OK' | 'NG') => {
+    if (shift === 'I') {
+      setShiftIJudgment(value);
+      onUpdate(spec.id, { shiftIValue: value });
+      onValueCommit(spec.id, 'I');
+    } else if (shift === 'II') {
+      setShiftIIJudgment(value);
+      onUpdate(spec.id, { shiftIIValue: value });
+      onValueCommit(spec.id, 'II');
+    } else {
+      setShiftIIIJudgment(value);
+      onUpdate(spec.id, { shiftIIIValue: value });
+      onValueCommit(spec.id, 'III');
+    }
+  }, [spec.id, onUpdate, onValueCommit]);
 
   const runRecognition = useCallback(async (dataUrl: string) => {
     if (!dataUrl) return;
@@ -145,6 +178,81 @@ export const MeasurementRow = memo(function MeasurementRow({
       {label}: {status}
     </span>
   );
+
+  if (isVisual) {
+    return (
+      <div
+        id={`spec-row-${spec.id}`}
+        className={`p-4 transition-colors ${isOverallNG ? 'bg-red-50/40' : 'hover:bg-gray-50/50'} ${
+          isActive ? 'border-l-4 border-l-[#00236f]' : 'border-l-4 border-l-transparent'
+        }`}
+      >
+        {/* Row header: name + judgment badges */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
+          <div>
+            <p className="text-xs font-bold text-[#191c1d]">{spec.parameterName}</p>
+            <p className="text-[11px] text-[#757682] font-mono mt-0.5">
+              Visual Check &nbsp;·&nbsp; OK / NG Judgment
+            </p>
+          </div>
+          <div className="flex gap-1.5 self-start">
+            {statusBadge('SI', statusI as any)}
+            {statusBadge('SII', statusII as any)}
+            {statusBadge('SIII', statusIII as any)}
+          </div>
+        </div>
+
+        {/* Judgment selection buttons for each shift */}
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          {(['I', 'II', 'III'] as const).map((shift) => {
+            const label = shift === 'I' ? 'Shift I' : shift === 'II' ? 'Shift II' : 'Shift III';
+            const judgmentVal = shift === 'I' ? shiftIJudgment : shift === 'II' ? shiftIIJudgment : shiftIIIJudgment;
+            const shiftCode = shift === 'I' ? 'SI' : shift === 'II' ? 'SII' : 'SIII';
+
+            return (
+              <div key={shift} className="flex flex-col gap-1.5">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center justify-between">
+                  <span>{label}</span>
+                  <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[8px] font-bold border ${
+                    judgmentVal === 'OK' ? 'bg-green-50 text-green-700 border-green-200'
+                    : judgmentVal === 'NG' ? 'bg-red-50 text-[#ba1a1a] border-red-200 font-black'
+                    : 'bg-gray-50 text-[#757682] border-gray-200'
+                  }`}>
+                    {shiftCode}: {judgmentVal || '--'}
+                  </span>
+                </label>
+                
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleJudgmentChange(shift, 'OK')}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer text-center ${
+                      judgmentVal === 'OK'
+                        ? 'bg-green-600 text-white border-transparent shadow-sm'
+                        : 'bg-white text-green-700 border-green-200 hover:bg-green-50'
+                    }`}
+                  >
+                    OK
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleJudgmentChange(shift, 'NG')}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer text-center ${
+                      judgmentVal === 'NG'
+                        ? 'bg-red-600 text-white border-transparent shadow-sm'
+                        : 'bg-white text-red-700 border-red-200 hover:bg-red-50'
+                    }`}
+                  >
+                    NG
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

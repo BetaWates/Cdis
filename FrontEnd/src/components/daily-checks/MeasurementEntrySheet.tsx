@@ -66,8 +66,8 @@ export function MeasurementEntrySheet({
 }: MeasurementEntrySheetProps) {
   const isSpeechSupported =
     typeof window !== 'undefined' &&
-    (typeof (window as any).SpeechRecognition !== 'undefined' ||
-      typeof (window as any).webkitSpeechRecognition !== 'undefined');
+    typeof window.MediaRecorder !== 'undefined' &&
+    !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 
   // Initialise row states lazily — runs once on mount for the current form
   const [rowStates, setRowStates] = useState<Record<string, RowState>>(() => {
@@ -96,7 +96,8 @@ export function MeasurementEntrySheet({
   const [activeSpecIndex, setActiveSpecIndex] = useState(0);
   const [zoomScale, setZoomScale] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const isMountedRef = useRef(true);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -114,7 +115,7 @@ export function MeasurementEntrySheet({
     }
   }, []);
 
-  // Cleanup speech recognition on unmount
+  // Cleanup on unmount
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -122,11 +123,11 @@ export function MeasurementEntrySheet({
       if (voiceTimeoutRef.current) {
         clearTimeout(voiceTimeoutRef.current);
       }
-      if (recognitionRef.current) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try {
-          recognitionRef.current.abort();
+          mediaRecorderRef.current.stop();
         } catch (e) {
-          console.error('Failed to abort speech recognition on unmount:', e);
+          console.error('Failed to stop media recorder on unmount:', e);
         }
       }
       cleanupAudioPipeline();
@@ -162,9 +163,9 @@ export function MeasurementEntrySheet({
 
   const startVoice = useCallback(
     async (specId: string) => {
-      if (recognitionRef.current) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try {
-          recognitionRef.current.abort();
+          mediaRecorderRef.current.stop();
         } catch (e) {
           console.error(e);
         }
@@ -175,12 +176,10 @@ export function MeasurementEntrySheet({
       }
       cleanupAudioPipeline();
 
-      const SpeechRecognitionCtor =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognitionCtor) {
+      if (typeof window === 'undefined' || typeof window.MediaRecorder === 'undefined') {
         updateRow(specId, {
           voiceState: 'failed',
-          voiceError: 'Layanan Speech Recognition tidak didukung di browser ini. Gunakan Chrome atau Edge.',
+          voiceError: 'Layanan perekaman suara tidak didukung di browser ini.',
         });
         return;
       }
@@ -191,108 +190,126 @@ export function MeasurementEntrySheet({
         });
         mediaStreamRef.current = stream;
 
-        const audioCtx = new AudioContext();
-        audioCtxRef.current = audioCtx;
-        const source = audioCtx.createMediaStreamSource(stream);
-        const dest = audioCtx.createMediaStreamDestination();
-        source.connect(dest);
+        let options: any = {};
+        let mimeType = 'audio/webm';
+        if (MediaRecorder.isTypeSupported('audio/webm')) {
+          options = { mimeType: 'audio/webm' };
+          mimeType = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/wav')) {
+          options = { mimeType: 'audio/wav' };
+          mimeType = 'audio/wav';
+        }
 
-        const recognition: SpeechRecognition = new SpeechRecognitionCtor();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
+        const mediaRecorder = new MediaRecorder(stream, options);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
 
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          cleanupAudioPipeline();
+
+          updateRow(specId, { isListening: false, voiceState: 'processing', voiceError: '' });
+
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+
+          try {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, `audio.${mimeType === 'audio/wav' ? 'wav' : 'webm'}`);
+
+            const response = await fetch('/api/voice/transcribe', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!response.ok) {
+              let errMsg = 'Transcription failed. Please use manual input.';
+              try {
+                const errJson = await response.json();
+                if (errJson.error) {
+                  errMsg = errJson.error;
+                }
+              } catch (e) {}
+              
+              updateRow(specId, {
+                voiceState: 'failed',
+                voiceError: errMsg,
+              });
+              return;
+            }
+
+            const data = await response.json();
+            const transcript = data.transcript;
+
+            if (!transcript) {
+              updateRow(specId, {
+                voiceState: 'failed',
+                voiceError: 'Transcription returned empty result. Please try again.',
+              });
+              return;
+            }
+
+            const converted = transcript.trim();
+            const parsedValue = parseFloat(converted);
+
+            setRowStates((prev) => {
+              const currentRow = prev[specId];
+              if (!currentRow) return prev;
+              const activeShift = currentRow.activeShift ?? 'I';
+              const updateKey =
+                activeShift === 'II' ? 'shiftIIValue' : activeShift === 'III' ? 'shiftIIIValue' : 'shiftIValue';
+
+              if (!isNaN(parsedValue)) {
+                setTimeout(() => {
+                  handleValueCommit(specId, activeShift);
+                }, 0);
+
+                return {
+                  ...prev,
+                  [specId]: {
+                    ...currentRow,
+                    [updateKey]: converted,
+                    voiceState: 'idle',
+                    voiceError: '',
+                  }
+                };
+              } else {
+                return {
+                  ...prev,
+                  [specId]: {
+                    ...currentRow,
+                    voiceState: 'failed',
+                    voiceError: `Input suara "${transcript}" tidak dapat dibaca sebagai angka. Silakan coba lagi.`,
+                  }
+                };
+              }
+            });
+          } catch (error: any) {
+            console.error('Error during transcription workflow:', error);
+            updateRow(specId, {
+              voiceState: 'failed',
+              voiceError: 'Gagal menghubungi server transkripsi. Harap periksa jaringan Anda.',
+            });
+          }
+        };
+
+        // 10 seconds timeout to automatically stop recording
         voiceTimeoutRef.current = setTimeout(() => {
-          console.warn('Voice recognition timed out.');
-          updateRow(specId, {
-            isListening: false,
-            voiceState: 'failed',
-            voiceError: 'Tidak ada suara terdeteksi atau koneksi gagal. Coba lagi atau gunakan input manual.',
-          });
-          if (recognitionRef.current) {
+          console.warn('Voice recording timed out.');
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
             try {
-              recognitionRef.current.abort();
+              mediaRecorderRef.current.stop();
             } catch (e) {
               console.error(e);
             }
           }
-          cleanupAudioPipeline();
-        }, 9000);
+        }, 10000);
 
-        recognition.onresult = (event: SpeechRecognitionEvent) => {
-          if (voiceTimeoutRef.current) {
-            clearTimeout(voiceTimeoutRef.current);
-            voiceTimeoutRef.current = null;
-          }
-          updateRow(specId, { voiceState: 'processing' });
-
-          const transcript = event.results[0][0].transcript;
-          const converted = spokenNumberToDigit(transcript);
-          const parsedValue = parseFloat(converted);
-          const activeShift = rowStates[specId]?.activeShift ?? 'I';
-          const updateKey =
-            activeShift === 'II' ? 'shiftIIValue' : activeShift === 'III' ? 'shiftIIIValue' : 'shiftIValue';
-          
-          if (!isNaN(parsedValue)) {
-            updateRow(specId, { 
-              [updateKey]: converted,
-              voiceState: 'idle',
-              voiceError: ''
-            });
-            handleValueCommit(specId, activeShift);
-          } else {
-            updateRow(specId, { 
-              voiceState: 'failed', 
-              voiceError: `Input suara "${transcript}" tidak dapat dibaca sebagai angka. Silakan coba lagi.`
-            });
-          }
-        };
-
-        recognition.onerror = (e: Event) => {
-          if (voiceTimeoutRef.current) {
-            clearTimeout(voiceTimeoutRef.current);
-            voiceTimeoutRef.current = null;
-          }
-          cleanupAudioPipeline();
-          const err = e as any;
-          if (err.error === 'aborted') {
-            return;
-          }
-          const friendlyMsg = getFriendlyVoiceErrorMessage(err.error);
-          updateRow(specId, { 
-            isListening: false, 
-            voiceState: 'failed', 
-            voiceError: friendlyMsg 
-          });
-        };
-
-        recognition.onend = () => {
-          if (voiceTimeoutRef.current) {
-            clearTimeout(voiceTimeoutRef.current);
-            voiceTimeoutRef.current = null;
-          }
-          cleanupAudioPipeline();
-          
-          setRowStates((prev) => {
-            const currentRow = prev[specId];
-            if (!currentRow) return prev;
-            
-            if (currentRow.voiceState === 'failed') {
-              return {
-                ...prev,
-                [specId]: { ...currentRow, isListening: false }
-              };
-            }
-            
-            return {
-              ...prev,
-              [specId]: { ...currentRow, isListening: false, voiceState: 'idle' }
-            };
-          });
-        };
-
-        recognitionRef.current = recognition;
-        recognition.start();
+        mediaRecorder.start();
         updateRow(specId, { isListening: true, voiceState: 'listening', voiceError: '' });
       } catch (err) {
         if (voiceTimeoutRef.current) {
@@ -300,14 +317,14 @@ export function MeasurementEntrySheet({
           voiceTimeoutRef.current = null;
         }
         cleanupAudioPipeline();
-        updateRow(specId, { 
-          isListening: false, 
-          voiceState: 'failed', 
-          voiceError: 'Akses mikrofon ditolak atau gangguan sistem audio. Silakan coba lagi.' 
+        updateRow(specId, {
+          isListening: false,
+          voiceState: 'failed',
+          voiceError: 'Akses mikrofon ditolak atau gangguan sistem audio. Silakan coba lagi.',
         });
       }
     },
-    [updateRow, rowStates, handleValueCommit, cleanupAudioPipeline]
+    [updateRow, handleValueCommit, cleanupAudioPipeline]
   );
 
   const stopVoice = useCallback(
@@ -316,17 +333,15 @@ export function MeasurementEntrySheet({
         clearTimeout(voiceTimeoutRef.current);
         voiceTimeoutRef.current = null;
       }
-      if (recognitionRef.current) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try {
-          recognitionRef.current.stop();
+          mediaRecorderRef.current.stop();
         } catch (e) {
           console.error(e);
         }
       }
-      cleanupAudioPipeline();
-      updateRow(specId, { isListening: false, voiceState: 'idle' });
     },
-    [updateRow, cleanupAudioPipeline]
+    []
   );
 
   const handleSubmit = async () => {
@@ -335,40 +350,45 @@ export function MeasurementEntrySheet({
     const hasInvalid = requiredSpecs.some((s) => {
       const row = rowStates[s.id];
       if (!row) return true;
+      const isVisual = (s as any).inputType === 'visual' || (s as any).input_type === 'visual';
       const vI = row.shiftIValue?.trim();
       const vII = row.shiftIIValue?.trim();
       const vIII = row.shiftIIIValue?.trim();
+      if (isVisual) {
+        return !vI || !vII || !vIII;
+      }
       return !vI || isNaN(Number(vI)) || !vII || isNaN(Number(vII)) || !vIII || isNaN(Number(vIII));
     });
     if (hasInvalid) {
-      alert('Please fill in all required measurement parameters with valid numeric values for Shift I, II, and III before submitting.');
+      alert('Please fill in all required parameters with valid values for Shift I, II, and III before submitting.');
       return;
     }
 
     const measurements: MeasurementEntry[] = requiredSpecs.map((spec) => {
       const row = rowStates[spec.id];
-      const statusI = evaluateStatus(row.shiftIValue, spec.standardValue, spec.tolerance);
-      const statusII = evaluateStatus(row.shiftIIValue, spec.standardValue, spec.tolerance);
-      const statusIII = evaluateStatus(row.shiftIIIValue, spec.standardValue, spec.tolerance);
+      const isVisual = (spec as any).inputType === 'visual' || (spec as any).input_type === 'visual';
+      const statusI = isVisual ? (row.shiftIValue as 'OK' | 'NG') : evaluateStatus(row.shiftIValue, spec.standardValue, spec.tolerance);
+      const statusII = isVisual ? (row.shiftIIValue as 'OK' | 'NG') : evaluateStatus(row.shiftIIValue, spec.standardValue, spec.tolerance);
+      const statusIII = isVisual ? (row.shiftIIIValue as 'OK' | 'NG') : evaluateStatus(row.shiftIIIValue, spec.standardValue, spec.tolerance);
       const overallStatus = statusI === 'NG' || statusII === 'NG' || statusIII === 'NG' ? 'NG' : 'OK';
       return {
         paramName: spec.parameterName,
-        standardValue: spec.standardValue,
-        tolerance: spec.tolerance,
-        unit: spec.unit,
+        standardValue: spec.standardValue || '',
+        tolerance: spec.tolerance || '',
+        unit: spec.unit || '',
         measuredValue: `${row.shiftIValue} | ${row.shiftIIValue} | ${row.shiftIIIValue}`,
         status: overallStatus,
-        inputMode: row.mode,
-        handwritingData: row.handwritingData,
+        inputMode: isVisual ? undefined : row.mode,
+        handwritingData: isVisual ? undefined : row.handwritingData,
         shiftIValue: row.shiftIValue,
         shiftIStatus: statusI,
-        shiftIHandwritten: row.shiftIHandwritten,
+        shiftIHandwritten: isVisual ? false : row.shiftIHandwritten,
         shiftIIValue: row.shiftIIValue,
         shiftIIStatus: statusII,
-        shiftIIHandwritten: row.shiftIIHandwritten,
+        shiftIIHandwritten: isVisual ? false : row.shiftIIHandwritten,
         shiftIIIValue: row.shiftIIIValue,
         shiftIIIStatus: statusIII,
-        shiftIIIHandwritten: row.shiftIIIHandwritten,
+        shiftIIIHandwritten: isVisual ? false : row.shiftIIIHandwritten,
       };
     });
 
@@ -420,6 +440,10 @@ export function MeasurementEntrySheet({
   const hasAnyNG = requiredSpecs.some((spec) => {
     const row = rowStates[spec.id];
     if (!row) return false;
+    const isVisual = (spec as any).inputType === 'visual' || (spec as any).input_type === 'visual';
+    if (isVisual) {
+      return row.shiftIValue === 'NG' || row.shiftIIValue === 'NG' || row.shiftIIIValue === 'NG';
+    }
     return (
       evaluateStatus(row.shiftIValue, spec.standardValue, spec.tolerance) === 'NG' ||
       evaluateStatus(row.shiftIIValue, spec.standardValue, spec.tolerance) === 'NG' ||

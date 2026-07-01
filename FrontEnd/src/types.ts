@@ -7,6 +7,8 @@ export interface Specification {
   tolerance: string;
   unit: string;
   isOptional?: boolean;
+  inputType?: 'numeric' | 'visual';
+  input_type?: 'numeric' | 'visual';
 }
 
 export interface MasterForm {
